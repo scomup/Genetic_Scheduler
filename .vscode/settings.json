@@ -46,6 +46,7 @@
         "thread": "cpp",
         "csignal": "cpp",
         "valarray": "cpp",
-        "set": "cpp"
+        "set": "cpp",
+        "unordered_set": "cpp"
     }
 }

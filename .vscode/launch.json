@@ -5,7 +5,7 @@
                 "name": "(gdb) Launch",
                 "type": "cppdbg",
                 "request": "launch",
-                "program": "/home/liu/workspace/Scheduler_GA/build/Scheduler",
+                "program": "/home/liu/workspace/Genetic_Scheduler/build/Scheduler",
                 "args": [],
                 "stopAtEntry": false,
                 "cwd": "${workspaceRoot}",
