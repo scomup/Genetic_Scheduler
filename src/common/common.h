@@ -5,62 +5,70 @@
 #include <functional>
 #include <random>
 
-namespace Scheduler {
-namespace common {
-
-  template <typename T>
-  std::vector<T> sort_indexes(const std::vector<T> &v) {
-  
-    // initialize original index locations
-    std::vector<T> idx(v.size());
-    std::iota(idx.begin(), idx.end(), 0);
-  
-    // sort indexes based on comparing values in v
-    std::sort(idx.begin(), idx.end(),
-         [&v](T i1, T i2) {return v[i1] < v[i2];});
-  
-    return idx;
-  }
-
-  template <typename T>
-  T randi(T lo, T hi, uint32_t seed = 0)
-  {
-    #if 0
-      std::random_device rnd;  
-      std::mt19937 mt(rnd()); 
-      std::uniform_int_distribution<> rand(lo, hi);
-      return rand(mt);
-      #else
-      //srand (time(NULL));
-      int n = hi - lo + 1;
-      int i = rand_r(&seed) % n;
-      if (i < 0) i = -i;
-      return lo + i;
-      #endif
-      
-  }
-}
-
-/*
-double rand_gaussian(double sigma, uint32_t seed = 0)
+namespace Scheduler
 {
-  double x1, x2, w, r;
+namespace common
+{
 
-  do
-  {
-    do { r = drand48_r(&seed); } while (r==0.0);
-    x1 = 2.0 * r - 1.0;
-    do { r = drand48_r(&seed); } while (r==0.0);
-    x2 = 2.0 * r - 1.0;
-    w = x1*x1 + x2*x2;
-  } while(w > 1.0 || w==0.0);
 
-  return(sigma * x2 * sqrt(-2.0*log(w)/w));
+template <typename T>
+std::vector<T> sort_indexes(const std::vector<T> &v)
+{
+
+  // initialize original index locations
+  std::vector<T> idx(v.size());
+  std::iota(idx.begin(), idx.end(), 0);
+
+  // sort indexes based on comparing values in v
+  std::sort(idx.begin(), idx.end(),
+            [&v](T i1, T i2) { return v[i1] < v[i2]; });
+
+  return idx;
 }
-*/
+
+template <typename T>
+T randi(T lo, T hi, uint32_t& seed)
+{
+  int n = hi - lo + 1;
+  int i = rand_r(&seed) % n;
+  if (i < 0)
+    i = -i;
+  return lo + i;
+}
 
 
+template <typename T>
+T rand_normal(T mean, T stddev, uint32_t& seed)
+{ //Box muller method
+  static T n2 = 0.0;
+  static int n2_cached = 0;
+  if (!n2_cached)
+  {
+    T x, y, r;
+    do
+    {
+      x = 2.0 * static_cast <float> (rand_r(&seed)) / static_cast <float> (RAND_MAX) - 1;
+      y = 2.0 * static_cast <float> (rand_r(&seed)) / static_cast <float> (RAND_MAX) - 1;
+      r = x * x + y * y;
+    } while (r == 0.0 || r > 1.0);
+    {
+      T d = sqrt(-2.0 * log(r) / r);
+      T n1 = x * d;
+      n2 = y * d;
+      T result = n1 * stddev + mean;
+      n2_cached = 1;
+      return result;
+    }
+  }
+  else
+  {
+    n2_cached = 0;
+    return n2 * stddev + mean;
+  }
+}
 
+
+}
 }
 
 #endif

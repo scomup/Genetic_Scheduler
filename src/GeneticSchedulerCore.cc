@@ -26,16 +26,34 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
 
     for (int i = 0, N = omp_get_max_threads(); i < N; ++i)
     {
-        seeds_.emplace_back(time(NULL));
+        seeds_.emplace_back(time(NULL)^(i+1));
     }
+    /*
+    double sum = 0.0;
+    //#pragma omp parallel for reduction(+:sum)
+    for (uint64_t i = 0; i < max_cell_num; i++)
+    {
+        double r = std::abs(Scheduler::common::rand_normal<double>(0, 0.18, seeds_[omp_get_thread_num()]));
+        if(r > 1)
+        r = fmod (r,1.);
 
-    //#pragma omp parallel for
+        //double r = rand_r(&seeds_[omp_get_thread_num()]);
+        //int r = Scheduler::common::randi<double>(0, 100, seeds_[omp_get_thread_num()]);
+        sum += r;
+        //printf("%f\n",r);
+    }
+    printf("%f\n",sum);
+
+
+    return;
+    */
+    #pragma omp parallel for
     for (uint32_t i = 0; i < max_cell_num_; i++)
     {
         auto cell = generate_new_cell();
         int16_t score = evaluate(cell);
         CellWithScore cell_with_score{std::move(cell), score};
-        //#pragma omp critical
+        #pragma omp critical
         {
             cellWithScores.emplace_back(std::move(cell_with_score));
         }
@@ -45,7 +63,7 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
 
     auto p1 = std::chrono::system_clock::now();
     auto diff1 = p1 - p0;
-
+#if 0
     for (uint32_t loop = 0; loop < max_loop_; loop++)
     {
         auto p2 = std::chrono::system_clock::now();
@@ -53,7 +71,7 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
         cellWithScores.erase(cellWithScores.begin() + (max_cell_num_ / death_rate), cellWithScores.end());
         std::vector<CellWithScore> new_cellWithScores;
 
-        #pragma omp parallel for
+#pragma omp parallel for
         for (size_t i = 0; i < cellWithScores.size(); i++)
         {
             for (size_t j = 0; j < death_rate; j++)
@@ -61,7 +79,7 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
                 auto cell = create_next_generation(cellWithScores[i].cell);
                 int16_t score = evaluate(cell);
                 CellWithScore cell_with_score{std::move(cell), score};
-                #pragma omp critical
+#pragma omp critical
                 {
                     new_cellWithScores.emplace_back(std::move(cell_with_score));
                 }
@@ -73,15 +91,44 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
         if(best_result_ > cellWithScores[0].score){
             best_result_ = cellWithScores[0].score;
         }
+#else
 
-        auto p3 = std::chrono::system_clock::now();
-        auto diff2 = p3 - p2;
-        printf("time:%5ld     best:%4d   worst%4d   survivor:%4d~%4d\n",
-               std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
-               cellWithScores[0].score,
-               cellWithScores.back().score,
-               cellWithScores[0].score,
-               cellWithScores[max_cell_num_ / death_rate].score);
+    for (uint32_t loop = 0; loop < max_loop_; loop++)
+    {
+        auto p2 = std::chrono::system_clock::now();
+
+        std::vector<CellWithScore> new_cellWithScores(max_cell_num_);
+
+        #pragma omp parallel for
+        for (size_t i = 0; i < max_cell_num_; i++)
+        {
+            double r = std::abs(Scheduler::common::rand_normal<double>(0, 1./death_rate, seeds_[omp_get_thread_num()]));
+            if(r > 1)
+            r = fmod (r,1.);
+            uint32_t select = r*max_cell_num_;
+            auto cell = create_next_generation(cellWithScores[select].cell);
+            int16_t score = evaluate(cell);
+            CellWithScore cell_with_score{std::move(cell), score};
+            new_cellWithScores[i] = std::move(cell_with_score);
+        }
+
+        new_cellWithScores.swap(cellWithScores);
+        std::sort(cellWithScores.begin(), cellWithScores.end(), [](const CellWithScore &a, const CellWithScore &b) { return a.score < b.score; });
+        if (best_result_ > cellWithScores[0].score)
+        {
+            best_result_ = cellWithScores[0].score;
+        }
+
+#endif
+
+    auto p3 = std::chrono::system_clock::now();
+    auto diff2 = p3 - p2;
+    //printf("time:%5ld     best:%4d   worst%4d   survivor:%4d~%4d\n",
+    //       std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
+    //       cellWithScores[0].score,
+    //       cellWithScores.back().score,
+    //       cellWithScores[0].score,
+    //       cellWithScores[max_cell_num_ / death_rate].score);
     }
 
 
