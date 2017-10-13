@@ -1,19 +1,19 @@
-#include <assert.h>
-
 #include "common/common.h"
 #include "FileReader.h"
 #include "GeneticSchedulerCore.h"
 
-int16_t inf = -1;
+#include <time.h>
+#include <random>
+#include<stdio.h>
+#include<omp.h>
 
 
 int main(int argc, char *argv[])
 {
-    srand(time(NULL));
     auto reader = Scheduler::FileReader(std::string("/home/liu/workspace/Genetic_Scheduler/STG/50/rand0007.stg"));
-
-    Scheduler::GeneticSchedulerCore scheduler(reader.getNodes(), 4,  100000,  100,  0.2);
-    
-    std::cout << "OK!" << std::endl;
-
+    auto p0 = std::chrono::system_clock::now();
+    Scheduler::GeneticSchedulerCore scheduler(reader.getNodes(), 4,  pow(2,14),  8,  0.05, 50);
+    auto p1 = std::chrono::system_clock::now();
+    auto diff1 = p1 - p0;
+    std::cout << "time:" << std::chrono::duration_cast<std::chrono::milliseconds>(diff1).count() << " millisec.  " << "best: "<<scheduler.getBest()<< std::endl;
 }
