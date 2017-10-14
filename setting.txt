@@ -1,0 +1,5 @@
+all_core_num   =  4
+max_cell_num   =  16384
+aphla          =  0.4
+mutation_rate  =  0.05
+max_loop       =  50

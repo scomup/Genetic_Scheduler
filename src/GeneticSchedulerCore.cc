@@ -1,24 +1,17 @@
 #include <iostream>
 #include <assert.h>
 #include <omp.h>
+#include <fstream>
 
 #include "GeneticSchedulerCore.h"
 
 namespace Scheduler
 {
 
-GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
-                                           int16_t all_core_num, uint32_t max_cell_num = 10000,
-                                           uint16_t death_rate = 10,
-                                           float mutation_rate = 0.1,
-                                           uint16_t max_loop = 100)
+GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::Config* config_ptr)
     : nodes_(nodes)
-    , all_core_num_(all_core_num)
+    , config_ptr_(config_ptr)
     , best_result_(std::numeric_limits<int16_t>::max())
-    , max_cell_num_(max_cell_num)
-    , death_rate_(death_rate)
-    , mutation_rate_(mutation_rate)
-    , max_loop_(max_loop)
 {
 
     auto p0 = std::chrono::system_clock::now();
@@ -28,27 +21,9 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
     {
         seeds_.emplace_back(time(NULL)^(i+1));
     }
-    /*
-    double sum = 0.0;
-    //#pragma omp parallel for reduction(+:sum)
-    for (uint64_t i = 0; i < max_cell_num; i++)
-    {
-        double r = std::abs(Scheduler::common::rand_normal<double>(0, 0.18, seeds_[omp_get_thread_num()]));
-        if(r > 1)
-        r = fmod (r,1.);
 
-        //double r = rand_r(&seeds_[omp_get_thread_num()]);
-        //int r = Scheduler::common::randi<double>(0, 100, seeds_[omp_get_thread_num()]);
-        sum += r;
-        //printf("%f\n",r);
-    }
-    printf("%f\n",sum);
-
-
-    return;
-    */
     #pragma omp parallel for
-    for (uint32_t i = 0; i < max_cell_num_; i++)
+    for (uint32_t i = 0; i < config_ptr_->max_cell_num; i++)
     {
         auto cell = generate_new_cell();
         int16_t score = evaluate(cell);
@@ -63,54 +38,51 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
 
     auto p1 = std::chrono::system_clock::now();
     auto diff1 = p1 - p0;
-#if 0
-    for (uint32_t loop = 0; loop < max_loop_; loop++)
+
+    for (uint32_t loop = 0; loop < config_ptr_->max_loop; loop++)
     {
         auto p2 = std::chrono::system_clock::now();
 
-        cellWithScores.erase(cellWithScores.begin() + (max_cell_num_ / death_rate), cellWithScores.end());
-        std::vector<CellWithScore> new_cellWithScores;
+        std::vector<CellWithScore> new_cellWithScores(config_ptr_->max_cell_num);
 
-#pragma omp parallel for
-        for (size_t i = 0; i < cellWithScores.size(); i++)
-        {
-            for (size_t j = 0; j < death_rate; j++)
-            {
-                auto cell = create_next_generation(cellWithScores[i].cell);
-                int16_t score = evaluate(cell);
-                CellWithScore cell_with_score{std::move(cell), score};
-#pragma omp critical
-                {
-                    new_cellWithScores.emplace_back(std::move(cell_with_score));
-                }
-            }
-        }
+        auto roulette = create_roulette(cellWithScores);
 
-        new_cellWithScores.swap(cellWithScores);
-        std::sort(cellWithScores.begin(), cellWithScores.end(), [](const CellWithScore &a, const CellWithScore &b) { return a.score < b.score; });
-        if(best_result_ > cellWithScores[0].score){
-            best_result_ = cellWithScores[0].score;
-        }
-#else
-
-    for (uint32_t loop = 0; loop < max_loop_; loop++)
-    {
-        auto p2 = std::chrono::system_clock::now();
-
-        std::vector<CellWithScore> new_cellWithScores(max_cell_num_);
-
+        //char buffer [50];
+        //sprintf (buffer, "%d.txt", loop);
+        //std::ofstream ofs (buffer, std::ofstream::out);
+        //std::vector<int16_t> nnn(config_ptr_->max_cell_num);
+        //std::fill(nnn.begin(),nnn.end(),0);
         #pragma omp parallel for
-        for (size_t i = 0; i < max_cell_num_; i++)
+        for (size_t i = 0; i < config_ptr_->max_cell_num; i++)
         {
-            double r = std::abs(Scheduler::common::rand_normal<double>(0, 1./death_rate, seeds_[omp_get_thread_num()]));
-            if(r > 1)
-            r = fmod (r,1.);
-            uint32_t select = r*max_cell_num_;
+            uint32_t select = spin_roulette(roulette,seeds_[omp_get_thread_num()] );
+
+            //nnn[select] ++;
+            
+            //std::cout<<index<<std::endl;
+            //double r = std::abs(Scheduler::common::rand_normal<double>(0, 1./death_rate, seeds_[omp_get_thread_num()]));
+            //if(r > 1)
+            //r = fmod (r,1.);
+            //uint32_t select = r*config_ptr_->max_cell_num;
             auto cell = create_next_generation(cellWithScores[select].cell);
             int16_t score = evaluate(cell);
             CellWithScore cell_with_score{std::move(cell), score};
             new_cellWithScores[i] = std::move(cell_with_score);
         }
+
+        /*
+        for (size_t i = 0; i < config_ptr_->max_cell_num; i++)
+        {
+            if(i>=1){
+                ofs<<roulette[i]-roulette[i-1]<<",";
+            }
+            else{
+                ofs<<roulette[i]<<",";
+            }
+            ofs <<cellWithScores[i].score<<","<< nnn[i] <<std::endl;
+        }
+        ofs.close();
+        */
 
         new_cellWithScores.swap(cellWithScores);
         std::sort(cellWithScores.begin(), cellWithScores.end(), [](const CellWithScore &a, const CellWithScore &b) { return a.score < b.score; });
@@ -119,20 +91,76 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes,
             best_result_ = cellWithScores[0].score;
         }
 
-#endif
 
     auto p3 = std::chrono::system_clock::now();
     auto diff2 = p3 - p2;
-    //printf("time:%5ld     best:%4d   worst%4d   survivor:%4d~%4d\n",
-    //       std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
-    //       cellWithScores[0].score,
-    //       cellWithScores.back().score,
-    //       cellWithScores[0].score,
-    //       cellWithScores[max_cell_num_ / death_rate].score);
+    //printf("time:%5ld\n",
+    //       std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count());
+
+    printf("time:%5ld     best:%4d   worst%4d\n",
+           std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
+           cellWithScores[0].score,
+           cellWithScores.back().score);
     }
 
 
 };
+
+int32_t GeneticSchedulerCore::spin_roulette(std::vector<double> &roulette, uint32_t &seed)
+{
+    double r = static_cast<double>(rand_r(&seed)) / static_cast<double>(RAND_MAX);
+    int32_t index = config_ptr_->max_cell_num / 2;
+    int32_t step = index;
+    while (true)
+    {
+        if (step > 1)
+            step /= 2;
+
+        if (index == 0 || (r >= roulette[index - 1] && r < roulette[index]))
+        {
+            break;
+        }
+        if (r >= roulette[index - 1])
+        {
+            index += step;
+        }
+        else
+        {
+            index -= step;
+        }
+    }
+    return index;
+}
+
+std::vector<double> GeneticSchedulerCore::create_roulette(std::vector<CellWithScore> &cellWithScores)
+{
+    std::vector<double> roulette = std::vector<double>(cellWithScores.size());
+    int16_t best_result = cellWithScores[0].score;
+    double sum = 0;
+    #pragma omp parallel for reduction(+ : sum)
+    for (size_t i = 0; i < roulette.size(); i++)
+    {
+        int16_t current_result = cellWithScores[i].score;
+        int16_t diff = current_result - best_result;
+        assert(diff >= 0);
+        roulette[i] = exp(-(config_ptr_->aphla * diff));
+        sum += roulette[i];
+    }
+    assert(sum != 0);
+    roulette[0] = roulette[0] / sum;
+    //#pragma omp parallel for
+    for (size_t i = 1; i < roulette.size(); i++)
+    {
+
+        roulette[i] = roulette[i - 1] + roulette[i] / sum;
+        //std::cout<<roulette[i]<<std::endl;
+    }
+    //for(size_t i = 1; i < roulette.size(); i++){
+    //
+    //    std::cout<<roulette[i]<<std::endl;
+    //}
+    return roulette;
+}
 
 std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_cell()
 {
@@ -141,7 +169,6 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_cell()
     (*cell)[0] = 0;
     for (int16_t i = 1; i < node_num; i++)
     {
-
         int16_t min_index = 0;
         for (int16_t j : nodes_[i].sub_nodes)
         {
@@ -161,11 +188,11 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_cell()
     return cell;
 }
 
-int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>>& cell)
+int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &cell)
 {
     std::vector<int16_t> idx = Scheduler::common::sort_indexes<int16_t>(*cell);
     std::vector<int16_t> nodes_finish_time(nodes_.size());
-    std::vector<int16_t> cores_ocuppied_time(all_core_num_);
+    std::vector<int16_t> cores_ocuppied_time(config_ptr_->all_core_num);
 
     std::fill(nodes_finish_time.begin(), nodes_finish_time.end(), inf);
     std::fill(cores_ocuppied_time.begin(), cores_ocuppied_time.end(), 0);
@@ -202,7 +229,7 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::create_next_generati
     {
         float r = static_cast <float> (rand_r(&seeds_[omp_get_thread_num()])) / static_cast <float> (RAND_MAX);
         
-        if (r < mutation_rate_ )
+        if (r < config_ptr_->mutation_rate )
         {
             int16_t min_index = 0;
             for (int16_t j : nodes_[i].sub_nodes)
@@ -225,4 +252,5 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::create_next_generati
     }
     return new_cell;
 }
+
 }

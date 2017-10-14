@@ -9,8 +9,9 @@
 
 #include "common/make_unique.h"
 #include "common/common.h"
-
+#include "config.h"
 #include "node.h"
+
 
 namespace Scheduler
 {
@@ -26,22 +27,22 @@ struct CellWithScore
 class GeneticSchedulerCore
 {
   public:
-    GeneticSchedulerCore(std::vector<Node> nodes, int16_t all_core_num, uint32_t max_cell_num, uint16_t death_rate, float mutation_rate, uint16_t max_loop);
+    GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::Config* config_ptr);
     int16_t getBest(){return best_result_;};
 
   private:
     std::unique_ptr<std::vector<int16_t>> generate_new_cell();
     int16_t evaluate(std::unique_ptr<std::vector<int16_t>>& cell);
     std::unique_ptr<std::vector<int16_t>>  create_next_generation(std::unique_ptr<std::vector<int16_t>>& cell);
+    std::vector<double> create_roulette(std::vector<CellWithScore>& cellWithScores);  
+    int32_t spin_roulette(std::vector<double>& roulette, uint32_t& seed);
+      
+
 
   private: 
     std::vector<Node> nodes_;
-    int16_t all_core_num_;
+    Scheduler::Config* config_ptr_;
     int16_t best_result_;
-    uint32_t max_cell_num_;
-    uint16_t death_rate_;
-    float mutation_rate_;
-    uint16_t max_loop_;
     std::vector<uint32_t> seeds_;
 };
 
