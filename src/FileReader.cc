@@ -3,8 +3,8 @@
 namespace Scheduler
 {
 
-FileReader::FileReader(std::string filename)
-    : filename_(filename)
+FileReader::FileReader(std::string filename, int16_t all_core_num)
+    : filename_(filename), all_core_num_(all_core_num)
 {
     read_node_file();
 }
@@ -30,7 +30,7 @@ void FileReader::read_node_file()
         int16_t core;
         std::vector<int16_t> sub_nodes;
         fin >> id >> runing_time >> sub_num;
-        core = id%4+1;
+        core = id % all_core_num_ + 1;
         sub_nodes.resize(sub_num);
         for (int16_t i = 0; i < sub_num; i++)
         {
