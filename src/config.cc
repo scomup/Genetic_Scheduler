@@ -52,23 +52,27 @@ namespace Scheduler
                     }
                     else if (id == "max_chromosome_num")
                     {
-                        max_chromosome_num = atoi(val.c_str());
-                        ;
+                        max_chromosome_num = atoi(val.c_str()); 
                     }
                     else if (id == "aphla")
                     {
-                        aphla = atof(val.c_str());
-                        ;
+                        aphla = atof(val.c_str()); 
                     }
                     else if (id == "mutation_rate")
                     {
-                        mutation_rate = atof(val.c_str());
-                        ;
+                        mutation_rate = atof(val.c_str());  
                     }
                     else if (id == "max_loop")
                     {
-                        max_loop = atoi(val.c_str());
-                        ;
+                        max_loop = atoi(val.c_str()); 
+                    }
+                    else if (id == "use_crossover")
+                    {
+                        use_crossover = atoi(val.c_str()); 
+                    }
+                    else if (id == "show_step_info")
+                    {
+                        show_step_info = atoi(val.c_str()); 
                     }
                 }
             }

@@ -48,7 +48,7 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
 
         std::vector<chromosomeWithScore> new_chromosomeWithScores(config_ptr_->max_chromosome_num);
 
-        //Create a roulette by the score of chromosomes 
+        //Create a roulette by the score of all chromosomes 
         Roulette roulette = Roulette(chromosomeWithScores, config_ptr_->aphla);
 
         //char buffer [50];
@@ -69,9 +69,14 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
                 select_b = roulette.spin_roulette(seeds_[omp_get_thread_num()] );
             }
             while(select_a == select_b);
-            auto chromosome = crossover(chromosomeWithScores[select_a].chromosome,
-                                        chromosomeWithScores[select_b].chromosome,
-                                        seeds_[omp_get_thread_num()]);
+            auto chromosome = common::make_unique<std::vector<int16_t>>(*chromosomeWithScores[select_a].chromosome);
+            if (config_ptr_->use_crossover)
+            {
+                chromosome = crossover(chromosomeWithScores[select_a].chromosome,
+                                            chromosomeWithScores[select_b].chromosome,
+                                            seeds_[omp_get_thread_num()]);
+            }
+
             //change the values of one or more genes in the chromosome by probability
             mutation(chromosome);
 
@@ -103,23 +108,20 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
             best_result_ = chromosomeWithScores[0].score;
         }
 
+        auto p3 = std::chrono::system_clock::now();
+        auto diff2 = p3 - p2;
 
-    auto p3 = std::chrono::system_clock::now();
-    auto diff2 = p3 - p2;
-
-    
-    //printf("time:%5ld\n",
-    //       std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count());
-    //return;
-
-    printf("time:%5ld     best:%4d   worst%4d\n",
-           std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
-           chromosomeWithScores[0].score,
-           chromosomeWithScores.back().score);
-    //return;
+        //printf("time:%5ld\n",
+        //       std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count());
+        //return;
+        if (config_ptr_->show_step_info)
+        {
+            printf("time:%5ld     best:%4d   worst%4d\n",
+                   std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
+                   chromosomeWithScores[0].score,
+                   chromosomeWithScores.back().score);
+        }
     }
-
-
 };
 
 //-----------------------------------------------------------------------------
@@ -200,10 +202,10 @@ int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &ch
     return cores_ocuppied_time.back();
 }
 
-//-----------------------------------------------------------------------------
-//This funciton try to create new generation with mutation.
-//-----------------------------------------------------------------------------
-
+//----------------------------------------------------------------------------
+//New generation created by crossover.
+//The new chromosome will mutated by a certain probability.
+//----------------------------------------------------------------------------
 void GeneticSchedulerCore::mutation(std::unique_ptr<std::vector<int16_t>>& chromosome)
 {
     auto new_chromosome = common::make_unique<std::vector<int16_t>>(*chromosome);
@@ -235,7 +237,11 @@ void GeneticSchedulerCore::mutation(std::unique_ptr<std::vector<int16_t>>& chrom
         }
     }
 }
-
+//----------------------------------------------------------------------------
+//Randomly select two chromosome as parent.
+//Exchange part of the gene of the selected chromosome, and generate a new one.
+//Due to the special definition of our chromosome, we designed a unique crossover mechanism...
+//----------------------------------------------------------------------------
 std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::crossover(std::unique_ptr<std::vector<int16_t>> &chromosome_a,
                                                                       std::unique_ptr<std::vector<int16_t>> &chromosome_b,
                                                                       uint32_t &seed)
@@ -244,8 +250,7 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::crossover(std::uniqu
     std::vector<int16_t> idx_b = Scheduler::common::sort_indexes<int16_t>(*chromosome_b);
     int16_t node_num = (*chromosome_a).size();
     std::vector<bool> mark(node_num);
-    //std::fill(mark.begin(),mark.end(),false);
-    int16_t cutting_point = Scheduler::common::randi<int16_t>(1, node_num-1, seed);
+    int16_t cutting_point = Scheduler::common::randi<int16_t>(1, node_num, seed);
 
     for(int16_t i = 0; i<cutting_point; i++)
     {
@@ -261,7 +266,6 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::crossover(std::uniqu
 
     std::vector<int16_t> chromosome = Scheduler::common::sort_indexes<int16_t>(idx_a);
     auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(chromosome);
-    //evaluate(chromosome_ptr);
     return chromosome_ptr;
 }
 }
