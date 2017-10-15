@@ -50,9 +50,9 @@ namespace Scheduler
                     {
                         all_core_num = atoi(val.c_str());
                     }
-                    else if (id == "max_cell_num")
+                    else if (id == "max_chromosome_num")
                     {
-                        max_cell_num = atoi(val.c_str());
+                        max_chromosome_num = atoi(val.c_str());
                         ;
                     }
                     else if (id == "aphla")

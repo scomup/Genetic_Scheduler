@@ -13,28 +13,31 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
     , config_ptr_(config_ptr)
     , best_result_(std::numeric_limits<int16_t>::max())
 {
-
+    //Initial seed(for rand) for each openmp thread.
+    //this step is very essential because multiple threads access one seed may leads to cache issues.
     auto p0 = std::chrono::system_clock::now();
-    std::vector<CellWithScore> cellWithScores;
-
+    std::vector<chromosomeWithScore> chromosomeWithScores;
     for (int i = 0, N = omp_get_max_threads(); i < N; ++i)
     {
         seeds_.emplace_back(time(NULL)^(i+1));
     }
 
+    //Generate the initial chromosomes and evaluate them.
     #pragma omp parallel for
-    for (uint32_t i = 0; i < config_ptr_->max_cell_num; i++)
+    for (uint32_t i = 0; i < config_ptr_->max_chromosome_num; i++)
     {
-        auto cell = generate_new_cell();
-        int16_t score = evaluate(cell);
-        CellWithScore cell_with_score{std::move(cell), score};
+        auto chromosome = generate_new_chromosome();
+        int16_t score = evaluate(chromosome);
+        chromosomeWithScore chromosome_with_score{std::move(chromosome), score};
         #pragma omp critical
         {
-            cellWithScores.emplace_back(std::move(cell_with_score));
+            chromosomeWithScores.emplace_back(std::move(chromosome_with_score));
         }
     }
 
-    std::sort(cellWithScores.begin(), cellWithScores.end(), [](const CellWithScore &a, const CellWithScore &b) { return a.score < b.score; });
+    //To easy find better chromosomes, we just sort them by score.
+    //If use roulette may not necessary...  
+    std::sort(chromosomeWithScores.begin(), chromosomeWithScores.end(), [](const chromosomeWithScore &a, const chromosomeWithScore &b) { return a.score < b.score; });
 
     auto p1 = std::chrono::system_clock::now();
     auto diff1 = p1 - p0;
@@ -43,35 +46,44 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
     {
         auto p2 = std::chrono::system_clock::now();
 
-        std::vector<CellWithScore> new_cellWithScores(config_ptr_->max_cell_num);
+        std::vector<chromosomeWithScore> new_chromosomeWithScores(config_ptr_->max_chromosome_num);
 
-        auto roulette = create_roulette(cellWithScores);
+        //Create a roulette by the score of chromosomes 
+        Roulette roulette = Roulette(chromosomeWithScores, config_ptr_->aphla);
 
         //char buffer [50];
         //sprintf (buffer, "%d.txt", loop);
         //std::ofstream ofs (buffer, std::ofstream::out);
-        //std::vector<int16_t> nnn(config_ptr_->max_cell_num);
+        //std::vector<int16_t> nnn(config_ptr_->max_chromosome_num);
         //std::fill(nnn.begin(),nnn.end(),0);
         #pragma omp parallel for
-        for (size_t i = 0; i < config_ptr_->max_cell_num; i++)
+        for (size_t i = 0; i < config_ptr_->max_chromosome_num; i++)
         {
-            uint32_t select = spin_roulette(roulette,seeds_[omp_get_thread_num()] );
+            
+            //takes two chromosomes (parents) by roulette and swaps part of 
+            //their  genetic  information  to  create  new chromosome
+            uint32_t select_a;
+            uint32_t select_b;
+            do{
+                select_a = roulette.spin_roulette(seeds_[omp_get_thread_num()] );
+                select_b = roulette.spin_roulette(seeds_[omp_get_thread_num()] );
+            }
+            while(select_a == select_b);
+            auto chromosome = crossover(chromosomeWithScores[select_a].chromosome,
+                                        chromosomeWithScores[select_b].chromosome,
+                                        seeds_[omp_get_thread_num()]);
+            //change the values of one or more genes in the chromosome by probability
+            mutation(chromosome);
 
             //nnn[select] ++;
-            
-            //std::cout<<index<<std::endl;
-            //double r = std::abs(Scheduler::common::rand_normal<double>(0, 1./death_rate, seeds_[omp_get_thread_num()]));
-            //if(r > 1)
-            //r = fmod (r,1.);
-            //uint32_t select = r*config_ptr_->max_cell_num;
-            auto cell = create_next_generation(cellWithScores[select].cell);
-            int16_t score = evaluate(cell);
-            CellWithScore cell_with_score{std::move(cell), score};
-            new_cellWithScores[i] = std::move(cell_with_score);
+            //Evaluate the chromosome.
+            int16_t score = evaluate(chromosome);
+            chromosomeWithScore chromosome_with_score{std::move(chromosome), score};
+            new_chromosomeWithScores[i] = std::move(chromosome_with_score);
         }
 
         /*
-        for (size_t i = 0; i < config_ptr_->max_cell_num; i++)
+        for (size_t i = 0; i < config_ptr_->max_chromosome_num; i++)
         {
             if(i>=1){
                 ofs<<roulette[i]-roulette[i-1]<<",";
@@ -79,118 +91,86 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
             else{
                 ofs<<roulette[i]<<",";
             }
-            ofs <<cellWithScores[i].score<<","<< nnn[i] <<std::endl;
+            ofs <<chromosomeWithScores[i].score<<","<< nnn[i] <<std::endl;
         }
         ofs.close();
         */
 
-        new_cellWithScores.swap(cellWithScores);
-        std::sort(cellWithScores.begin(), cellWithScores.end(), [](const CellWithScore &a, const CellWithScore &b) { return a.score < b.score; });
-        if (best_result_ > cellWithScores[0].score)
+        new_chromosomeWithScores.swap(chromosomeWithScores);
+        std::sort(chromosomeWithScores.begin(), chromosomeWithScores.end(), [](const chromosomeWithScore &a, const chromosomeWithScore &b) { return a.score < b.score; });
+        if (best_result_ > chromosomeWithScores[0].score)
         {
-            best_result_ = cellWithScores[0].score;
+            best_result_ = chromosomeWithScores[0].score;
         }
 
 
     auto p3 = std::chrono::system_clock::now();
     auto diff2 = p3 - p2;
+
+    
     //printf("time:%5ld\n",
     //       std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count());
+    //return;
 
     printf("time:%5ld     best:%4d   worst%4d\n",
            std::chrono::duration_cast<std::chrono::milliseconds>(diff2).count(),
-           cellWithScores[0].score,
-           cellWithScores.back().score);
+           chromosomeWithScores[0].score,
+           chromosomeWithScores.back().score);
+    //return;
     }
 
 
 };
 
-int32_t GeneticSchedulerCore::spin_roulette(std::vector<double> &roulette, uint32_t &seed)
-{
-    double r = static_cast<double>(rand_r(&seed)) / static_cast<double>(RAND_MAX);
-    int32_t index = config_ptr_->max_cell_num / 2;
-    int32_t step = index;
-    while (true)
-    {
-        if (step > 1)
-            step /= 2;
-
-        if (index == 0 || (r >= roulette[index - 1] && r < roulette[index]))
-        {
-            break;
-        }
-        if (r >= roulette[index - 1])
-        {
-            index += step;
-        }
-        else
-        {
-            index -= step;
-        }
-    }
-    return index;
-}
-
-std::vector<double> GeneticSchedulerCore::create_roulette(std::vector<CellWithScore> &cellWithScores)
-{
-    std::vector<double> roulette = std::vector<double>(cellWithScores.size());
-    int16_t best_result = cellWithScores[0].score;
-    double sum = 0;
-    #pragma omp parallel for reduction(+ : sum)
-    for (size_t i = 0; i < roulette.size(); i++)
-    {
-        int16_t current_result = cellWithScores[i].score;
-        int16_t diff = current_result - best_result;
-        assert(diff >= 0);
-        roulette[i] = exp(-(config_ptr_->aphla * diff));
-        sum += roulette[i];
-    }
-    assert(sum != 0);
-    roulette[0] = roulette[0] / sum;
-    //#pragma omp parallel for
-    for (size_t i = 1; i < roulette.size(); i++)
-    {
-
-        roulette[i] = roulette[i - 1] + roulette[i] / sum;
-        //std::cout<<roulette[i]<<std::endl;
-    }
-    //for(size_t i = 1; i < roulette.size(); i++){
-    //
-    //    std::cout<<roulette[i]<<std::endl;
-    //}
-    return roulette;
-}
-
-std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_cell()
+//-----------------------------------------------------------------------------
+//This function used to generate new chromosomes.
+//A valid chromosome is an int array of length N (N = number of nodes ).
+//denote as C[N]
+//C[i] indicate the scheduling order of node_i. 
+//if node_i is a parent node of node_j, C[i] < C[j]
+//-----------------------------------------------------------------------------
+std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_chromosome()
 {
     int16_t node_num = nodes_.size() - 1;
-    auto cell = common::make_unique<std::vector<int16_t>>(node_num);
-    (*cell)[0] = 0;
+    auto chromosome = common::make_unique<std::vector<int16_t>>(node_num);
+    (*chromosome)[0] = 0;
     for (int16_t i = 1; i < node_num; i++)
     {
         int16_t min_index = 0;
         for (int16_t j : nodes_[i].sub_nodes)
         {
-            min_index = std::max((*cell)[j], min_index);
+            min_index = std::max((*chromosome)[j], min_index);
         }
         min_index++;
         int16_t index = Scheduler::common::randi<int16_t>(min_index, i, seeds_[omp_get_thread_num()]);
-        (*cell)[i] = index;
+        (*chromosome)[i] = index;
         for (int16_t j = 1; j < i; j++)
         {
-            if ((*cell)[j] >= index)
+            if ((*chromosome)[j] >= index)
             {
-                (*cell)[j]++;
+                (*chromosome)[j]++;
             }
         }
     }
-    return cell;
+    return chromosome;
 }
 
-int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &cell)
+//-----------------------------------------------------------------------------
+//This funciton try to assembly of the scheduling result according to the genetic information.
+
+//We choose node by scheduling order carried by chromosome in each step.
+//We calcuate the finished time for this node_i.
+//  .time_a = Max(the finished time of all parent task of node_i)
+//  .time_b = The most recent time when system can provide enough core resources for this node.
+//  .The finished time of this node = Max(time_a, time_a) + the runing time of this node.
+//Update the occupied time of selected cores.
+//Finished if all node be processed.
+//Return the longest occupied time of cores.
+//-----------------------------------------------------------------------------
+
+int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &chromosome)
 {
-    std::vector<int16_t> idx = Scheduler::common::sort_indexes<int16_t>(*cell);
+    std::vector<int16_t> idx = Scheduler::common::sort_indexes<int16_t>(*chromosome);
     std::vector<int16_t> nodes_finish_time(nodes_.size());
     std::vector<int16_t> cores_ocuppied_time(config_ptr_->all_core_num);
 
@@ -220,9 +200,13 @@ int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &ce
     return cores_ocuppied_time.back();
 }
 
-std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::create_next_generation(std::unique_ptr<std::vector<int16_t>>& cell)
+//-----------------------------------------------------------------------------
+//This funciton try to create new generation with mutation.
+//-----------------------------------------------------------------------------
+
+void GeneticSchedulerCore::mutation(std::unique_ptr<std::vector<int16_t>>& chromosome)
 {
-    auto new_cell = common::make_unique<std::vector<int16_t>>(*cell);
+    auto new_chromosome = common::make_unique<std::vector<int16_t>>(*chromosome);
     int16_t node_num = nodes_.size() - 1;
 
     for (int16_t i = 1; i < node_num; i++)
@@ -234,23 +218,50 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::create_next_generati
             int16_t min_index = 0;
             for (int16_t j : nodes_[i].sub_nodes)
             {
-                min_index = std::max((*new_cell)[j], min_index);
+                min_index = std::max((*chromosome)[j], min_index);
             }
             min_index++;
-            int16_t current_index = (*new_cell)[i];
+            int16_t current_index = (*chromosome)[i];
             assert(min_index <= current_index);
             int16_t index = Scheduler::common::randi<int16_t>(min_index, current_index, seeds_[omp_get_thread_num()]);
             for (int16_t j = 1; j < node_num; j++)
             {
-                if ((*new_cell)[j] >= index && (*new_cell)[j] < current_index)
+                if ((*chromosome)[j] >= index && (*chromosome)[j] < current_index)
                 {
-                    (*new_cell)[j]++;
+                    (*chromosome)[j]++;
                 }
             }
-            (*new_cell)[i] = index;
+            (*chromosome)[i] = index;
         }
     }
-    return new_cell;
 }
 
+std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::crossover(std::unique_ptr<std::vector<int16_t>> &chromosome_a,
+                                                                      std::unique_ptr<std::vector<int16_t>> &chromosome_b,
+                                                                      uint32_t &seed)
+{
+    std::vector<int16_t> idx_a = Scheduler::common::sort_indexes<int16_t>(*chromosome_a);
+    std::vector<int16_t> idx_b = Scheduler::common::sort_indexes<int16_t>(*chromosome_b);
+    int16_t node_num = (*chromosome_a).size();
+    std::vector<bool> mark(node_num);
+    //std::fill(mark.begin(),mark.end(),false);
+    int16_t cutting_point = Scheduler::common::randi<int16_t>(1, node_num-1, seed);
+
+    for(int16_t i = 0; i<cutting_point; i++)
+    {
+        mark[idx_a[i]] = true;
+    }
+    for(int16_t i = 0; i<node_num; i++)
+    {
+        if(mark[idx_b[i]]){
+            continue;
+        }
+        idx_a[cutting_point++] = idx_b[i];
+    }
+
+    std::vector<int16_t> chromosome = Scheduler::common::sort_indexes<int16_t>(idx_a);
+    auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(chromosome);
+    //evaluate(chromosome_ptr);
+    return chromosome_ptr;
+}
 }

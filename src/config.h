@@ -17,7 +17,7 @@ class Config
     Config(std::string file_name);
 
     uint32_t all_core_num;
-    uint32_t max_cell_num;
+    uint32_t max_chromosome_num;
     float aphla;
     float mutation_rate;
     uint32_t max_loop;
