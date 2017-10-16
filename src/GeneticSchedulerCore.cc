@@ -69,21 +69,21 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
                 select_b = roulette.spin_roulette(seeds_[omp_get_thread_num()] );
             }
             while(select_a == select_b);
-            auto chromosome = common::make_unique<std::vector<int16_t>>(*chromosomeWithScores[select_a].chromosome);
+            auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(*chromosomeWithScores[select_a].chromosome);
             if (config_ptr_->use_crossover)
             {
-                chromosome = crossover(chromosomeWithScores[select_a].chromosome,
+                chromosome_ptr = crossover(chromosomeWithScores[select_a].chromosome,
                                             chromosomeWithScores[select_b].chromosome,
                                             seeds_[omp_get_thread_num()]);
             }
 
             //change the values of one or more genes in the chromosome by probability
-            mutation(chromosome);
+            mutation(chromosome_ptr);
 
             //nnn[select] ++;
             //Evaluate the chromosome.
-            int16_t score = evaluate(chromosome);
-            chromosomeWithScore chromosome_with_score{std::move(chromosome), score};
+            int16_t score = evaluate(chromosome_ptr);
+            chromosomeWithScore chromosome_with_score{std::move(chromosome_ptr), score};
             new_chromosomeWithScores[i] = std::move(chromosome_with_score);
         }
 
@@ -134,27 +134,29 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
 std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_chromosome()
 {
     int16_t node_num = nodes_.size() - 1;
-    auto chromosome = common::make_unique<std::vector<int16_t>>(node_num);
-    (*chromosome)[0] = 0;
+    std::vector<int16_t> node_order(node_num);
+
+    node_order[0] = 0;
     for (int16_t i = 1; i < node_num; i++)
     {
         int16_t min_index = 0;
         for (int16_t j : nodes_[i].sub_nodes)
         {
-            min_index = std::max((*chromosome)[j], min_index);
+            min_index = std::max(node_order[j], min_index);
         }
         min_index++;
         int16_t index = Scheduler::common::randi<int16_t>(min_index, i, seeds_[omp_get_thread_num()]);
-        (*chromosome)[i] = index;
+        node_order[i] = index;
         for (int16_t j = 1; j < i; j++)
         {
-            if ((*chromosome)[j] >= index)
+            if (node_order[j] >= index)
             {
-                (*chromosome)[j]++;
+                node_order[j]++;
             }
         }
     }
-    return chromosome;
+    auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(Scheduler::common::sort_indexes<int16_t>(node_order));
+    return chromosome_ptr;
 }
 
 //-----------------------------------------------------------------------------
@@ -170,16 +172,15 @@ std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_chromos
 //Return the longest occupied time of cores.
 //-----------------------------------------------------------------------------
 
-int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &chromosome)
+int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &chromosome_ptr)
 {
-    std::vector<int16_t> idx = Scheduler::common::sort_indexes<int16_t>(*chromosome);
     std::vector<int16_t> nodes_finish_time(nodes_.size());
     std::vector<int16_t> cores_ocuppied_time(config_ptr_->all_core_num);
 
     std::fill(nodes_finish_time.begin(), nodes_finish_time.end(), inf);
     std::fill(cores_ocuppied_time.begin(), cores_ocuppied_time.end(), 0);
 
-    for (int16_t i : idx)
+    for (int16_t i : *chromosome_ptr)
     {
         int16_t schedulabe_time = 0;
         for (size_t j = 0; j < nodes_[i].sub_nodes.size(); j++)
@@ -206,34 +207,36 @@ int16_t GeneticSchedulerCore::evaluate(std::unique_ptr<std::vector<int16_t>> &ch
 //New generation created by crossover.
 //The new chromosome will mutated by a certain probability.
 //----------------------------------------------------------------------------
-void GeneticSchedulerCore::mutation(std::unique_ptr<std::vector<int16_t>>& chromosome)
+void GeneticSchedulerCore::mutation(std::unique_ptr<std::vector<int16_t>>& chromosome_ptr)
 {
-    auto new_chromosome = common::make_unique<std::vector<int16_t>>(*chromosome);
+    std::vector<int16_t> node_order = Scheduler::common::sort_indexes<int16_t>(*chromosome_ptr);
     int16_t node_num = nodes_.size() - 1;
-
     for (int16_t i = 1; i < node_num; i++)
     {
         float r = static_cast <float> (rand_r(&seeds_[omp_get_thread_num()])) / static_cast <float> (RAND_MAX);
         
         if (r < config_ptr_->mutation_rate )
         {
-            int16_t min_index = 0;
+            int16_t min_order = 0;
             for (int16_t j : nodes_[i].sub_nodes)
             {
-                min_index = std::max((*chromosome)[j], min_index);
+                min_order = std::max(node_order[j], min_order);
             }
-            min_index++;
-            int16_t current_index = (*chromosome)[i];
-            assert(min_index <= current_index);
-            int16_t index = Scheduler::common::randi<int16_t>(min_index, current_index, seeds_[omp_get_thread_num()]);
-            for (int16_t j = 1; j < node_num; j++)
+            min_order++;
+            int16_t current_order = node_order[i];
+            assert(min_order <= current_order);
+            int16_t new_order = Scheduler::common::randi<int16_t>(min_order, current_order, seeds_[omp_get_thread_num()]);
+            if(new_order == current_order){
+                continue;
+            }
+            for (int16_t j = current_order - 1; j >= new_order; j--)
             {
-                if ((*chromosome)[j] >= index && (*chromosome)[j] < current_index)
-                {
-                    (*chromosome)[j]++;
-                }
+                int16_t node_to_be_moved = (*chromosome_ptr)[j];
+                (*chromosome_ptr)[j+1] = node_to_be_moved;
+                node_order[node_to_be_moved]++;
             }
-            (*chromosome)[i] = index;
+            (*chromosome_ptr)[new_order] = i;
+            node_order[i] = new_order;
         }
     }
 }
@@ -242,30 +245,27 @@ void GeneticSchedulerCore::mutation(std::unique_ptr<std::vector<int16_t>>& chrom
 //Exchange part of the gene of the selected chromosome, and generate a new one.
 //Due to the special definition of our chromosome, we designed a unique crossover mechanism...
 //----------------------------------------------------------------------------
-std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::crossover(std::unique_ptr<std::vector<int16_t>> &chromosome_a,
-                                                                      std::unique_ptr<std::vector<int16_t>> &chromosome_b,
+std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::crossover(std::unique_ptr<std::vector<int16_t>> &chromosome_a_ptr,
+                                                                      std::unique_ptr<std::vector<int16_t>> &chromosome_b_ptr,
                                                                       uint32_t &seed)
 {
-    std::vector<int16_t> idx_a = Scheduler::common::sort_indexes<int16_t>(*chromosome_a);
-    std::vector<int16_t> idx_b = Scheduler::common::sort_indexes<int16_t>(*chromosome_b);
-    int16_t node_num = (*chromosome_a).size();
+    auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(*chromosome_a_ptr); 
+    int16_t node_num = (*chromosome_a_ptr).size();
     std::vector<bool> mark(node_num);
     int16_t cutting_point = Scheduler::common::randi<int16_t>(1, node_num, seed);
 
     for(int16_t i = 0; i<cutting_point; i++)
     {
-        mark[idx_a[i]] = true;
+        mark[(*chromosome_a_ptr)[i]] = true;
     }
     for(int16_t i = 0; i<node_num; i++)
     {
-        if(mark[idx_b[i]]){
+        if(mark[(*chromosome_b_ptr)[i]]){
             continue;
         }
-        idx_a[cutting_point++] = idx_b[i];
+        (*chromosome_ptr)[cutting_point++] = (*chromosome_b_ptr)[i];
     }
 
-    std::vector<int16_t> chromosome = Scheduler::common::sort_indexes<int16_t>(idx_a);
-    auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(chromosome);
     return chromosome_ptr;
 }
 }

@@ -24,10 +24,10 @@ public:
 
 private:
   std::unique_ptr<std::vector<int16_t>> generate_new_chromosome();
-  int16_t evaluate(std::unique_ptr<std::vector<int16_t>> &chromosome);
-  void mutation(std::unique_ptr<std::vector<int16_t>> &chromosome);
-  std::unique_ptr<std::vector<int16_t>> crossover(std::unique_ptr<std::vector<int16_t>> &chromosome_a,
-                                                  std::unique_ptr<std::vector<int16_t>> &chromosome_b,
+  int16_t evaluate(std::unique_ptr<std::vector<int16_t>> &chromosome_ptr);
+  void mutation(std::unique_ptr<std::vector<int16_t>> &chromosome_ptr);
+  std::unique_ptr<std::vector<int16_t>> crossover(std::unique_ptr<std::vector<int16_t>> &chromosome_a_ptr,
+                                                  std::unique_ptr<std::vector<int16_t>> &chromosome_b_ptr,
                                                   uint32_t &seed);
 
 private:
