@@ -20,6 +20,7 @@ class GeneticSchedulerCore
 {
 public:
   GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::Config *config_ptr);
+  void run();
   int16_t getBest() { return best_result_; };
 
 private:

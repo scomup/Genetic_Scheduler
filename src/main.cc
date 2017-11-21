@@ -14,10 +14,11 @@ int main(int argc, char *argv[])
     }
     else
     {
-        p_reader = new Scheduler::FileReader(std::string("/home/liu/workspace/Genetic_Scheduler/STG/50/rand0007.stg"), config_ptr->all_core_num);
+        p_reader = new Scheduler::FileReader(std::string("/home/liu/workspace/Genetic_Scheduler/STG/50/rand0001.stg"), config_ptr->all_core_num);
     }
     auto p0 = std::chrono::system_clock::now();
     Scheduler::GeneticSchedulerCore scheduler(p_reader->getNodes(), config_ptr);
+    scheduler.run();
     auto p1 = std::chrono::system_clock::now();
     auto diff1 = p1 - p0;
     std::cout << "time:" << std::chrono::duration_cast<std::chrono::milliseconds>(diff1).count() << " millisec.  "

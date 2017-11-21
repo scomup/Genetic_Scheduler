@@ -15,28 +15,38 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
 {
     //Initial seed(for rand) for each openmp thread.
     //this step is very essential because multiple threads access one seed may leads to cache issues.
-    auto p0 = std::chrono::system_clock::now();
     std::vector<chromosomeWithScore> chromosomeWithScores;
     for (int i = 0, N = omp_get_max_threads(); i < N; ++i)
     {
         seeds_.emplace_back(time(NULL)^(i+1));
     }
 
-    //Generate the initial chromosomes and evaluate them.
-    #pragma omp parallel for
+};
+
+void GeneticSchedulerCore::run()
+{
+    auto p0 = std::chrono::system_clock::now();
+    std::vector<chromosomeWithScore> chromosomeWithScores;
+    for (int i = 0, N = omp_get_max_threads(); i < N; ++i)
+    {
+        seeds_.emplace_back(time(NULL) ^ (i + 1));
+    }
+
+//Generate the initial chromosomes and evaluate them.
+#pragma omp parallel for
     for (uint32_t i = 0; i < config_ptr_->max_chromosome_num; i++)
     {
         auto chromosome = generate_new_chromosome();
         int16_t score = evaluate(chromosome);
         chromosomeWithScore chromosome_with_score{std::move(chromosome), score};
-        #pragma omp critical
+#pragma omp critical
         {
             chromosomeWithScores.emplace_back(std::move(chromosome_with_score));
         }
     }
 
     //To easy find better chromosomes, we just sort them by score.
-    //If use roulette may not necessary...  
+    //If use roulette may not necessary...
     std::sort(chromosomeWithScores.begin(), chromosomeWithScores.end(), [](const chromosomeWithScore &a, const chromosomeWithScore &b) { return a.score < b.score; });
 
     auto p1 = std::chrono::system_clock::now();
@@ -48,33 +58,33 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
 
         std::vector<chromosomeWithScore> new_chromosomeWithScores(config_ptr_->max_chromosome_num);
 
-        //Create a roulette by the score of all chromosomes 
+        //Create a roulette by the score of all chromosomes
         Roulette roulette = Roulette(chromosomeWithScores, config_ptr_->aphla);
 
-        //char buffer [50];
-        //sprintf (buffer, "%d.txt", loop);
-        //std::ofstream ofs (buffer, std::ofstream::out);
-        //std::vector<int16_t> nnn(config_ptr_->max_chromosome_num);
-        //std::fill(nnn.begin(),nnn.end(),0);
-        #pragma omp parallel for
+//char buffer [50];
+//sprintf (buffer, "%d.txt", loop);
+//std::ofstream ofs (buffer, std::ofstream::out);
+//std::vector<int16_t> nnn(config_ptr_->max_chromosome_num);
+//std::fill(nnn.begin(),nnn.end(),0);
+#pragma omp parallel for
         for (size_t i = 0; i < config_ptr_->max_chromosome_num; i++)
         {
-            
-            //takes two chromosomes (parents) by roulette and swaps part of 
+
+            //takes two chromosomes (parents) by roulette and swaps part of
             //their  genetic  information  to  create  new chromosome
             uint32_t select_a;
             uint32_t select_b;
-            do{
-                select_a = roulette.spin_roulette(seeds_[omp_get_thread_num()] );
-                select_b = roulette.spin_roulette(seeds_[omp_get_thread_num()] );
-            }
-            while(select_a == select_b);
+            do
+            {
+                select_a = roulette.spin_roulette(seeds_[omp_get_thread_num()]);
+                select_b = roulette.spin_roulette(seeds_[omp_get_thread_num()]);
+            } while (select_a == select_b);
             auto chromosome_ptr = common::make_unique<std::vector<int16_t>>(*chromosomeWithScores[select_a].chromosome);
             if (config_ptr_->use_crossover)
             {
                 chromosome_ptr = crossover(chromosomeWithScores[select_a].chromosome,
-                                            chromosomeWithScores[select_b].chromosome,
-                                            seeds_[omp_get_thread_num()]);
+                                           chromosomeWithScores[select_b].chromosome,
+                                           seeds_[omp_get_thread_num()]);
             }
 
             //change the values of one or more genes in the chromosome by probability
@@ -122,14 +132,13 @@ GeneticSchedulerCore::GeneticSchedulerCore(std::vector<Node> nodes, Scheduler::C
                    chromosomeWithScores.back().score);
         }
     }
-};
-
+}
 //-----------------------------------------------------------------------------
 //This function used to generate new chromosomes.
 //A valid chromosome is an int array of length N (N = number of nodes ).
 //denote as C[N]
-//C[i] indicate the scheduling order of node_i. 
-//if node_i is a parent node of node_j, C[i] < C[j]
+//C indicate the order of tasks are scheduled.
+//ex. task C[i] is the i_th one be scheduled.
 //-----------------------------------------------------------------------------
 std::unique_ptr<std::vector<int16_t>> GeneticSchedulerCore::generate_new_chromosome()
 {
