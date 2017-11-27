@@ -1,80 +1,57 @@
-Genetic algorithm for Scheduling of Data-Parallel Tasks
+T. I. Foster and K. M. Chandy. Fortran M: A language for modular parallel programming.
+Journal of Parallel and Distributed Computing, 26:24®C35, 1995.
 
-Abstract ‚Äî This paper studies a task scheduling problem which schedules a set of data-parallel tasks on multiple cores. Unlike most of previous literature where each task is assumed to run on a single core, this work allows individual tasks to run on multiple cores in a data-parallel fashion. Since the scheduling problem is NP-hard, that is, to obtain the optimal solutions require search of the overall solution space, which is very time consuming. Therefore, heuristic methods are reasonable choose to obtain suboptimal results. In this paper, an efficient method based on genetic algorithm is proposed to solve this problem. Different with traditional Genetic algorithms for task scheduling, we proposed a new representation for the chromosome of tasks scheduling and corresponding genetic operators, aim to reduce the search space and improve the computing speed. In addition to normal implementation, we also implemented our algorithm with OpenMP, show how to speeded up our algorithm further. 
-Keywords ‚Äî task scheduling; multicore; data parallelism; branch-and-bound Genetic algorithm OpenMP
+S. Ramaswamy, S. Sapatnekar, and P. Banerjee. A framework for exploiting task and data
+parallelism on distributed memory multicomputers. IEEE Transactions on Parallel and
+Distributed Systems, 8(11):1098®C1115, Nov. 1997.
 
-I. Introduction
+A. R?adulescu, C. Nicolescu, A. J. C. van Gemund, and P. P. Jonker. CPR: Mixed task
+and data parallel scheduling for distributed systems. In 15th International Parallel and
+Distributed Processing Symposium (IPDPS°Ø2001), Apr. 2001
 
-The problem of task scheduling can be simply described as scheduling a set of tasks onto a multi-core system, and find the minimum scheduling length under the given constraint conditions. Due to the wide deployment of multi-core architecture not only in general-purpose processors but also in embedded processors, this problem has now become a more important problem than ever. 
-In general, task scheduling is considered a NP-hard problem. The effect of finding exact results is proved very complex, and consuming a large amount of memory and computing resources. Therefore, Many heuristic approaches for task scheduling have been proposedÔºàÈöè‰æø‰∏æ‰æãÔºâ. Recently, Genetic Algorithms (GAs) have been widely studied as useful heuristics for obtaining high quality solutions for task scheduling problem ÔºàÈöè‰æø‰∏æ‰æãÔºâ.
-Unfortunately, Majority of the works deal task scheduling with genetic algorithms only considered about task parallelism.  Many studies have shown that, for a large class of large computational applications, exploiting both task and data parallelism yields better speedups compared to either pure task parallelism or pure data parallelism.
-This paper presents an approach for task scheduling based on genetic algorithm, to solve the scheduling problem with task and data parallelism. Not only with different problem definition, we propose new representation of chromosomes aim to find a more flexible way to encode task and data parallelism simultaneously. The efficient genetic operators (select, crossover, mutation) corresponding to this chromosome also are presented. Our chromosome only encodes information about the ordering of task execution, ignores tasks are mapped on which cores,  this representation also reduce greatly the size of search space and improves the performance of algorithm. In additional, we implemented our algorithm with OpenMP; show how to speed-up our algorithm further.  
-The contributions of this paper are as follows:
-This paper presents an approach for task scheduling based on genetic algorithm, to solve the scheduling problem with task and data parallelism 
-This paper proposed a new chromosome representation to task scheduling problem and corresponding crossover and mutation strategies are used to minimize the makespan.
-The implementation with OpenMP for accelerating our proposed algorithm is discussed.
+Y. K. Kwok and I. Ahmad, °∞Static scheduling algorithms for
+allocating directed task graphs to multiprocessors,°± ACM
+Computing Surveys, vol. 31, no. 4, December 1999. 
 
-II. Problem Definition
+T. L. Adam, K. M. Candy, and J. Dickson, °∞A comparison of list
+scheduling for parallel processing system,°± Communication of the
+ACM, vol. 17, no. 12, pp. 685-690, Dec. 1974. 
 
-This work assumes homogeneous multicore processors. An application is modeled as an acyclic directed graph (DAG), so called a task graph, where a node represents a task and a directed edge represents a flow dependency between two tasks. Figure 0 (a) shows an example of a task graph. In this graph, tasks labeled ‚ÄúS‚Äù and ‚ÄúE‚Äù are dummy tasks which do not perform any meaningful computation. Tasks S and E denote an entry point and an exit point of the application, respectively. Two integer values are associated with each task. The first number denotes the degree of data parallelism of the task. In other words, the number denotes the number of cores which are necessary to run the task. We assume that the degree of data parallelism is decided by programmers, and how to decide it is out of scope of this paper. The latter number on each node denotes the execution time of the task. For example, task 1 runs on 3 cores, and it takes 30 time units to complete the task.
+list scheduling 
+[11] M. Y. Wu and D. D. Gajski, °∞Hyperpool: A programming aid for
+message passing,°± IEEE Transaction on Parallel and Distributed
+System, vol. 1, no. 3, pp. 330-343, July 1990.
 
-Given a task graph, task scheduling decides when and on which core each task is executed in such a way that the overall schedule length is minimized, while meeting constraints on flow dependency among tasks and the number of available cores. Figure 0 (b) shows one of optimal schedules on four cores for the task graph in Figure 0 (a).
+[12] J. J. Hwang, Y. C. Chow, F. D. Anger, and C. Y. Lee, °∞Scheduling
+precedence graph in systems with interprocessor communication
+times,°± SIAM Journal of Computing, vol. 18, no. 2, pp. 244-257,
+April 1989. 
 
-III. GENETIC ALGORITHM
+[13] G. C. Sih and E. A. Lee, °∞Compile time scheduling heuristic for
+interconnection®Cconstrained heterogeneous processor architecture,°±
+IEEE Transaction on Parallel and Distributed System, vol. 4, no.
+2, pp. 75-87, Feb. 1993.
 
-Genetic algorithm was first invented by Holland [13], it is a meta-heuristic inspired by the processes observed in natural selection. This algorithm think of set of candidate solutions for a problem as biological groups, the fitness of every solution is evaluated, according to Darwin's theory, The fitter ones are more likely selected and produce more next generations. During this process, the solution may  mutate and alter just like breeding process.
+[14] T. Hagras and J. Janecek, °∞A high performance, low complexity
+algorithm for compile-time job scheduling in homogeneous
+computing environment,°± in Proc. IEEE Int. Conf. on Parallel
+Processing Workshops, 2003. 
 
-The main principles of the GA are described as follows:
-1. Encoding technique(chromosome design)
-2. Initialization
-3. fitness function(environment)
-4. Genetic operators
-4.1. Selection
-4.2. crossover
-4.3. mutation
+J. Singh, °∞Improved task scheduling on parallel system using genetic algorithm,°± International Journal of Computer Applications, vol. 39, no. 17, February 2012.
 
+A.J. Page and T.J. Naughton, °∞Dynamic task scheduling using genetic
+algorithms for heterogeneous distributed computing,°± in 19th IEEE
+International Parallel and Distributed Processing Symposium, 2005. 
 
-1 Encoding technique(chromosome design)
-in genetic algorithm, chromosome is a set of strings which representing a potential solution for a problem.  Finding a adequate chromosome is one of the most important issue for a successful application of GAs. Due to all genetic operators are defined on chromosome, a good chromosome representation will make the genetic operators easier to implement, and limit the unnecessary search space. several different types of chromosomes are used in previous works for task scheduling problem, all of them contain the task scheduling and mapping information, means that both the ordering of tasks exection and tasks are mapped on which cores are encoded in chromosome.
-This kind of chromosome may not very efficient For task scheduling with task and data parallelism, because task can be mapped on multiple cores, that length of chromosome may tend to very long. we intend to find a more compressional representing of chromosome. Our proposed chromosome only encodes information about the ordering of task execution, ignores tasks are mapped on which cores,  this compressional representation also reduce greatly the size of search space and improves the performance of algorithm.
+Edwin S. H. Hou Nirwan Ansari "A genetic algorithm for multiprocessor scheduling" <em>IEEE Transactions on Parallel and Distributed Systems</em> vol. 5 no. 2 pp. 113-120 1994. 
 
-The proposed representation of chromosomes is show in Fig. 2
+F. Omara, M. Arafa, Genetic algorithms for task scheduling problem, Journal of Parallel and Distributed Computing 7 (2010) 13®C22
 
-(Âõ≥)
+P. Roy, M. Mejbah, N. Das. °∞Heuristic Based Task Scheduling in
+Multiprocessor Systems with Genetic Algorithm by choosing the
+eligible processor°±, International Journal of Distributed and Parallel
+Systems (IJDPS), Vol3, No.4, July 2012
 
-2 Initialization
-Our algorithm begins with a randomly generate a set of candidate solutions represented by chromosome which defined in (1). The generation of chromosome is explained in the below:
-
-3 Fitness function:
-The Fitness function is used to decodes a chromosome and assigns it a fitness value, we use a deterministic algorithm to schedule the tasks according to chromosome and task graph. this algorithm also restore the mapping information, that is, tasks are mapped on which cores. The pseudocode is shows as below:
--------------------
-pseudocode
--------------------
- beacuse the task scheduling algorithm is aim to minimize the overall scheduling length, obviously, the fitness function can be difined as follow:
-max(ft(all_task))
-
-4 Genetic operators
-
-4.1 Selection operator
-the selection operator is guided by the fitness value of each chromosome calculated by (3).  There are chromosome with better fitness value have a larger probability to survive. Different approaches were used in the selection operators such as roulette wheel selection, rank Selection and Steady-State Selection.  our algorithm use roulette wheel.
-
-4.2 crossover operator
-The crossover operator is analogous to reproduction and biological crossover. Two chromosomes are chosen from the population by selection operator according to the algorithm described in (4.1), the child chromosomes are produced from them. 
-Due to our chromosome represent the order of task execution, simple exchange part of gene on two chromosomes may produce invalid chromosomes, we use the following mothod to ensure the generated chromosomes is valid:
--------------------
-pseudocode
--------------------
-
-4.3. mutation operator
-Mutation operator will randomly alter one or more gene values, In genetic algorithms, selection operator will remove bad chromosomes, but lose the diversity in the population. mutation is a very important mechanism to recover it. Hence, the mutation operator give us the prossibility of producing better chlids than their parants. our mutation operator also guarantee that after mutation the  chromosomes is valid.
-the Details about mutation are given in follow:
--------------------
-pseudocode
--------------------
-
- 
-
-
-
-
-
+R. Entezari-Maleki, A. Movaghar
+A genetic-based scheduling algorithm to minimize the makespan of the grid applications.
+Grid and Distributed Computing Conference (GDC 2010), Communications in Computer and Information Science (CCIS), Springer press, Jeju Island, South Korea, 121 (2010), pp. 22-31
